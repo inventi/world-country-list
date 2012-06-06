@@ -17,14 +17,14 @@
 (defn no-tags? [country-info]
   (empty? (re-matches #".*?(<|>)+.*?" (str country-info))))
 
-(defn length-2? [code]
+(defn country-code-2? [code]
   (= 2 (count (:country-code code))))
 
 (defn check-map-values [countries]
          (doseq [country-map countries]
            (is (not-empty-info? (vals country-map)))
            (is (no-tags? (vals country-map)))
-           (is (length-2? country-map))))
+           (is (country-code-2? country-map))))
 
 (deftest test-map-values
          (testing "LT should have correct map values"
