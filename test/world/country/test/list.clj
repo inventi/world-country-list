@@ -31,5 +31,3 @@
                   (check-map-values lt))
          (testing "EN should have correct map values"
                   (check-map-values en)))
-
-
