@@ -1,4 +1,4 @@
-(ns world.country.list
+(ns country.list
   (:require [clojure.string :as st])
   (:import java.util.regex.Pattern
            java.net.URL

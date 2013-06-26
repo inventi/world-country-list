@@ -1,8 +1,7 @@
-(ns world.country.test.list
-  (:use [world.country.list])
+(ns country.test.list
+  (:use [country.list])
   (:use [clojure.test])
-  (:require [clojure.contrib.string :as st])
-  (:require [clojure.string :as string]))
+  (:require [clojure.string :as st]))
 
 (def lt (parse-countries :lt))
 (def en (parse-countries :en))
@@ -12,7 +11,7 @@
                   (= (count lt) (count en))))
 
 (defn not-empty-info? [country-info]
-  (complement (every? #(empty? (string/trim %)) country-info)))
+  (complement (every? #(empty? (st/trim %)) country-info)))
 
 (defn no-tags? [country-info]
   (empty? (re-matches #".*?(<|>)+.*?" (str country-info))))
