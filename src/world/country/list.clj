@@ -1,37 +1,39 @@
 (ns world.country.list
-  (:require [clojure.contrib.string :as st])
-  (:require [clojure.string :as stt])
-  (:import java.util.regex.Pattern))
-
+  (:require [clojure.string :as st])
+  (:import java.util.regex.Pattern
+           java.net.URL
+           java.nio.charset.Charset
+           (java.io BufferedReader InputStreamReader)))
 
 (defrecord country [short-name full-name country-code
                     capital citizenship adjective
                     currency currency-code subunit])
 
+(defn as-utf8-stream [stream]
+  (BufferedReader. (InputStreamReader. stream (Charset/forName "utf8"))))
+
 (defn partition-rows [col]
-  (butlast (rest (stt/split col #"(</?TR.*?>)"))))
+  (butlast (rest (st/split col #"(</?TR.*?>)"))))
 
-(defn handle-macedonia [string]
-  (stt/replace string #"\(<A HREF=\"#fn-5c\".*?A>\)" "FY"))
+(defn note-regex [code]
+  (Pattern/compile
+   (str "\\((<SUP>)?<A HREF=\"#fn-" code "\".*?A>(</SUP>)?\\)")
+     Pattern/CASE_INSENSITIVE))
 
-
-(defn capital-reg [code]
-  (Pattern/compile (str "\\((<SUP>)?<A HREF=\"#fn-" code "\".*?A>(</SUP>)?\\)")
-                   Pattern/CASE_INSENSITIVE))
-
-(defn handle-tokelau [string]
+(defn replace-notes [string]
   ((comp
-    #(stt/replace % (capital-reg "tk2") "No capital")
-    #(stt/replace % (capital-reg "tf2") "Saint-Pierre")
-    #(stt/replace % (capital-reg "hk3") "Beijing")
-    #(stt/replace % (capital-reg "il1") "Jerusalem"))
+    #(st/replace % (note-regex "5c") "FY")
+    #(st/replace % (note-regex "tk2") "No capital")
+    #(st/replace % (note-regex "tf2") "Saint-Pierre")
+    #(st/replace % (note-regex "hk3") "Beijing")
+    #(st/replace % (note-regex "il1") "Jerusalem"))
   string))
 
 (defn replace-nbsp [string]
-  (stt/replace string "&nbsp;" " "))
+  (st/replace string "&nbsp;" " "))
 
-(def trash-pattern (Pattern/compile
-                    (stt/join "|" ["<EM>"
+(def tags-regex
+  (Pattern/compile (st/join "|" ["<EM>"
                           "<SPAN CLASS=\"noItalic\".*SUP.*SPAN>"
                           "<SPAN.*?>"
                           "</SPAN>"
@@ -40,44 +42,52 @@
                           "<BR ?/?>"
                           "<WBR ?/?>"])))
 
-(defn remove-trash [col]
+(defn remove-tags [col]
   (map #(replace-nbsp
-          (stt/replace % trash-pattern "")) col))
+          (st/replace % tags-regex "")) col))
 
 (defn partition-cols [col]
   (map
     #(remove empty?
-             (map stt/trim
-                  (remove-trash
-                    (stt/split % #"(</?TD.*?>)")))) col))
+             (map st/trim
+                  (remove-tags
+                    (st/split % #"(</?TD.*?>)")))) col))
 
 (defn country-row? [word]
   (< -1 (.indexOf word "STRONG")))
 
-(defn remove-currency-cols [col]
-  (remove #(= 3 (count %)) col))
+(defn remove-currnecy-only-rows [countries]
+  (remove #(= 3 (count %)) countries))
 
-(defn map-keys [col]
-  (map  #(if (> 9 (count %))
-          (println (stt/join "|" %))
-          (apply ->country  %)) col))
+(defn map-countries [countries]
+  (map #(apply ->country  %) countries))
 
-(defn fetch-url[address]
-  (with-open [stream (.openStream (java.net.URL. address))]
-    (let  [buf (java.io.BufferedReader.
-                 (java.io.InputStreamReader. stream (java.nio.charset.Charset/forName "utf8")))]
-      (apply str (line-seq buf)))))
+(defn drop-wrong-records [countries]
+  (let [f #(not= (count %) 9)
+        wrong-rec (filter f countries)]
+    (if (not (empty? wrong-rec))
+      (do
+        (println "WARN! Can't parse some countries and will skip them:")
+        (println wrong-rec)
+        (remove f countries))
+      countries)))
 
-(defn parse-iso [url]
-  (map-keys
-    (remove-currency-cols
+
+(defn read-countries[address]
+  (with-open [stream (as-utf8-stream (.openStream (URL. address)))]
+      (apply str (line-seq stream))))
+
+(defn process-countries [url]
+  (map-countries
+   (drop-wrong-records
+    (remove-currnecy-only-rows
       (partition-cols
         (filter country-row?
                 (partition-rows
-                  (handle-tokelau
-                    (handle-macedonia
-                    (fetch-url url)))))))))
+                  (replace-notes
+                    (read-countries url)))))))))
 
 (defn parse-countries [lang-symbol]
   (let [lang (case lang-symbol :lt "lt" :en "en")]
-    (parse-iso (str "http://publications.europa.eu/code/" lang "/" lang "-5000500.htm"))))
+    (process-countries
+     (str "http://publications.europa.eu/code/" lang "/" lang "-5000500.htm"))))
